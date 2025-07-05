@@ -1,0 +1,35 @@
+name: CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'charts/waf/**'
+      - 'config/**'
+      - '.github/workflows/cd.yaml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: v3.10.0
+    - name: Install dependencies
+      run: |
+        helm repo add bitnami https://charts.bitnami.com/bitnami
+        helm repo add jetstack https://charts.jetstack.io
+        helm repo update
+    - name: Deploy to Kubernetes
+      run: |
+        helm upgrade --install waf charts/waf \
+          --namespace waf-system \
+          --create-namespace \
+          --set cert-manager.enabled=true \
+          --set ingress.hosts[0].host=waf.example.com \
+          --set ingress.tls[0].hosts[0]=waf.example.com
+      env:
+        KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}

@@ -9,87 +9,114 @@ spec:
   selector:
     matchLabels:
       {{- include "waf.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
   template:
     metadata:
       annotations:
-        prometheus.io/scrape: "{{ .Values.monitoring.prometheus.enabled }}"
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.monitoring.prometheus.port }}"
         prometheus.io/path: "{{ .Values.monitoring.prometheus.path }}"
       labels:
         {{- include "waf.selectorLabels" . | nindent 8 }}
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
-        {{- toYaml .Values.security.podSecurityContext | nindent 8 }}
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-      - name: {{ .Chart.Name }}
-        securityContext:
-          capabilities:
-            drop:
-            - ALL
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-        image: "{{ .Values.waf.image.repository }}:{{ .Values.waf.image.tag }}"
-        imagePullPolicy: {{ .Values.waf.image.pullPolicy }}
-        ports:
-        - name: http
-          containerPort: 80
-        - name: https
-          containerPort: 443
-        - name: metrics
-          containerPort: {{ .Values.monitoring.prometheus.port }}
-        env:
-        - name: BACKEND_SERVICE
-          value: {{ .Values.proxy.backendService | quote }}
-        - name: MODSECURITY_ENABLED
-          value: {{ .Values.waf.modsecurity.enabled | quote }}
-        volumeMounts:
-        - name: modsecurity-config
-          mountPath: /etc/nginx/modsecurity.d
-        - name: modsecurity-rules
-          mountPath: /etc/nginx/owasp-modsecurity-crs
-        - name: modsecurity-data
-          mountPath: /var/log/modsecurity
-        - name: nginx-config
-          mountPath: /etc/nginx/nginx.conf
-          subPath: nginx.conf
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 80
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /healthz
-            port: 80
-          initialDelaySeconds: 5
-          periodSeconds: 5
-        resources:
-          {{- toYaml .Values.waf.resources | nindent 10 }}
-      {{- if .Values.crowdsec.enabled }}
-      - name: crowdsec-bouncer
-        image: "{{ .Values.crowdsec.bouncerImage.repository }}:{{ .Values.crowdsec.bouncerImage.tag }}"
-        env:
-        - name: CROWDSEC_AGENT_HOST
-          value: "crowdsec-service.default.svc.cluster.local"
-        - name: CROWDSEC_BOUNCER_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: crowdsec-secrets
-              key: apiKey
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.monitoring.prometheus.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: config
+              mountPath: /etc/nginx/modsecurity.d
+              subPath: modsecurity
+            - name: modsecurity-audit
+              mountPath: /var/log/modsecurity/audit
+            - name: modsecurity-data
+              mountPath: /var/log/modsecurity/data
+            - name: tls
+              mountPath: /etc/nginx/ssl
+              readOnly: true
+          env:
+            - name: NGINX_WORKER_PROCESSES
+              value: {{ .Values.nginx.config.workerProcesses | quote }}
+            - name: NGINX_WORKER_CONNECTIONS
+              value: {{ .Values.nginx.config.workerConnections | quote }}
+      {{- if .Values.logging.enabled }}
+      {{- if .Values.logging.sidecar.enabled }}
+        - name: logging-sidecar
+          image: {{ .Values.logging.sidecar.image }}:{{ .Values.logging.sidecar.tag }}
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: modsecurity-audit
+              mountPath: /var/log/modsecurity/audit
+            - name: modsecurity-data
+              mountPath: /var/log/modsecurity/data
+      {{- end }}
       {{- end }}
       volumes:
-      - name: modsecurity-config
-        configMap:
-          name: {{ include "waf.fullname" . }}-modsecurity-config
-      - name: modsecurity-rules
-        configMap:
-          name: {{ include "waf.fullname" . }}-modsecurity-rules
-      - name: modsecurity-data
-        emptyDir: {}
-      - name: nginx-config
-        configMap:
-          name: {{ include "waf.fullname" . }}-nginx-config
-          items:
-          - key: nginx.conf
-            path: nginx.conf
+        - name: config
+          configMap:
+            name: {{ include "waf.fullname" . }}-config
+        - name: modsecurity-audit
+          emptyDir: {}
+        - name: modsecurity-data
+          emptyDir: {}
+        - name: tls
+          secret:
+            secretName: {{ include "waf.fullname" . }}-tls
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
