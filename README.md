@@ -325,10 +325,6 @@ make stress-test
 4. Add tests
 5. Submit a pull request
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## 👨‍💻 About the Author
 
 **Govind Singh Rajawat** is a passionate DevOps Engineer with expertise in cloud infrastructure, CI/CD pipelines, and Kubernetes security. With a focus on automation and security-first approaches, Govind specializes in building scalable, secure, and reliable cloud-native solutions.
@@ -344,13 +340,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - 🔒 **Security**: VAPT, Security Hardening, Compliance
 - 📊 **Monitoring**: Prometheus, Grafana, Observability
 - 🚀 **Automation**: Infrastructure as Code, GitOps
-
-## 🆘 Support
-
-- **Documentation**: [Wiki](https://github.com/govindrajawat/k8s-waf/wiki)
-- **Issues**: [GitHub Issues](https://github.com/govindrajawat/k8s-waf/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/govindrajawat/k8s-waf/discussions)
-- **Security**: [Security Policy](SECURITY.md)
 
 ## 🙏 Acknowledgments
 
