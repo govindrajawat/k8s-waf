@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "waf.fullname" . }}-modsecurity-config
+data:
+  modsecurity.conf: |
+    # ModSecurity configuration
+    SecRuleEngine {{ .Values.waf.modsecurity.secRuleEngine }}
+    SecAuditEngine RelevantOnly
+    SecAuditLogRelevantStatus "^(?:5|4(?!04))"
+    SecAuditLogParts ABIJDEFHZ
+    SecAuditLogType Serial
+    SecAuditLog {{ .Values.waf.modsecurity.auditLog }}
+    SecArgumentSeparator &
+    SecCookieFormat 0
+    SecUnicodeMapFile unicode.mapping 20127
+    SecStatusEngine On
+    
+    # OWASP CRS configuration
+    Include /etc/nginx/owasp-modsecurity-crs/crs-setup.conf
+    Include /etc/nginx/owasp-modsecurity-crs/rules/*.conf
+    
+    # Custom rules
+    {{ .Values.waf.modsecurity.customRules }}

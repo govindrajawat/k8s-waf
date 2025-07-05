@@ -1,68 +1,121 @@
-# WAF Configuration
-waf:
+# Default values for waf
+replicaCount: 2
+
+image:
+  repository: nginx/nginx-modsecurity
+  tag: 1.25.3
+  pullPolicy: IfNotPresent
+
+modsecurity:
   enabled: true
-  image:
-    repository: nginx/nginx-modsecurity
-    tag: 1.23.3
-    pullPolicy: IfNotPresent
-  modsecurity:
-    enabled: true
-    preset: "OWASP"  # Options: OWASP, Strict, Minimal
-    customRules: ""
+  preset: "owasp" # owasp or basic
+  rules:
+    denyStatus: 403
+    auditLog: true
+    auditLogParts: "ABIJDEFHZ"
+    auditLogRelevantStatus: "^(?:5|4(?!04))"
+    auditLogStorageDir: "/var/log/modsecurity/audit"
     secRuleEngine: "On"
-    auditLog: "/var/log/modsec_audit.log"
-  resources:
-    requests:
-      cpu: "500m"
-      memory: "512Mi"
-    limits:
-      cpu: "2000m"
-      memory: "2048Mi"
+    secRequestBodyLimit: 13107200
+    secRequestBodyNoFilesLimit: 131072
+    secRequestBodyInMemoryLimit: 131072
+    secResponseBodyLimit: 524288
+    secPcreMatchLimit: 1000
+    secPcreMatchLimitRecursion: 1000
 
-# Reverse Proxy Configuration
-proxy:
-  backendService: "http://app-service.default.svc.cluster.local:8080"
-  rateLimiting:
-    enabled: true
-    rate: "100r/s"
-    burst: 50
-    zoneSize: "10m"
+nginx:
+  config:
+    workerProcesses: "auto"
+    workerConnections: "1024"
+    keepaliveTimeout: "65"
+    clientMaxBodySize: "10m"
+    serverNamesHashBucketSize: "128"
+    rateLimit:
+      enabled: true
+      zoneSize: "10m"
+      rate: "10r/s"
+      burst: 20
+      delay: 8
 
-# TLS Configuration
-tls:
+ingress:
   enabled: true
-  certManager:
-    enabled: true
-    issuer: "letsencrypt-prod"
-    secretName: "waf-tls-cert"
-  autoRedirect: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/enable-modsecurity: "true"
+    nginx.ingress.kubernetes.io/modsecurity-snippet: |
+      SecRuleEngine On
+      SecAuditEngine RelevantOnly
+      SecAuditLogParts ABIJDEFHZ
+      SecAuditLogType Serial
+      SecAuditLog /var/log/modsecurity/audit.log
+      SecAuditLogStorageDir /var/log/modsecurity/audit/
+      SecDebugLog /var/log/modsecurity/debug.log
+      SecDebugLogLevel 0
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      modsecurity_rules_file /etc/nginx/modsecurity/main.conf;
+  hosts:
+    - host: waf.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: waf-tls
+      hosts:
+        - waf.example.com
 
-# CrowdSec Integration
-crowdsec:
+resources:
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 500m
+    memory: 256Mi
+
+autoscaling:
   enabled: true
-  apiKey: ""
-  bouncerImage:
-    repository: crowdsecurity/nginx-bouncer
-    tag: "latest"
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
 
-# Monitoring
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+certManager:
+  enabled: true
+  issuer:
+    name: "letsencrypt-prod"
+    kind: "ClusterIssuer"
+    server: "https://acme-v02.api.letsencrypt.org/directory"
+
 monitoring:
   enabled: true
   prometheus:
     enabled: true
     port: 9113
     path: "/metrics"
-  logging:
+  grafana:
     enabled: true
-    sidecar: true
+    dashboard:
+      enabled: true
 
-# Security Hardening
-security:
-  podSecurityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
-    fsGroup: 2000
-  networkPolicy:
+logging:
+  enabled: true
+  sidecar:
     enabled: true
-    ingress:
-      allowedIPs: []
+    image: "fluent/fluent-bit"
+    tag: "2.1.0"
+
+securityContext:
+  enabled: true
+  runAsUser: 101
+  runAsGroup: 101
+  fsGroup: 101
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - NET_BIND_SERVICE
