@@ -11,6 +11,8 @@ keywords:
   - modsecurity
   - kubernetes
   - firewall
+  - owasp
+  - crs
 home: https://github.com/your-username/k8s-waf
 sources:
   - https://github.com/your-username/k8s-waf
@@ -25,12 +27,3 @@ annotations:
   vendor: Your Organization
   support: https://github.com/your-username/k8s-waf/issues
 kubeVersion: ">=1.24.0-0"
-dependencies:
-  - name: prometheus-operator
-    version: "^9.0.0"
-    repository: https://prometheus-community.github.io/helm-charts
-    condition: monitoring.enabled
-  - name: grafana
-    version: "^6.0.0"
-    repository: https://grafana.github.io/helm-charts
-    condition: monitoring.enabled

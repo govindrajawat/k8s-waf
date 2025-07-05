@@ -15,8 +15,8 @@ waf:
   
   # Image configuration
   image:
-    repository: owasp/modsecurity-crs
-    tag: "v4.0.0-nginx"
+    repository: your-registry/k8s-waf
+    tag: "latest"
     pullPolicy: IfNotPresent
     
   # NGINX image

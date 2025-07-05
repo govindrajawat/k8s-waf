@@ -340,3 +340,20 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [ModSecurity](https://modsecurity.org/) for WAF engine
 - [NGINX](https://nginx.org/) for web server
 - [Kubernetes](https://kubernetes.io/) for orchestration platform
+
+## 📁 Directory Structure
+
+- `charts/waf/` — Helm chart for deploying the WAF
+- `config/nginx/` — NGINX configuration files
+- `config/modsecurity/` — ModSecurity config and CRS setup
+- `config/modsecurity/rules/` — Place CRS and custom rules here
+- `scripts/entrypoint.sh` — Entrypoint script for the container
+- `scripts/healthcheck.sh` — Healthcheck script for container
+- `scripts/fail2ban-setup.sh` — Fail2Ban setup for NGINX logs
+- `Dockerfile` — Multi-stage build for NGINX + ModSecurity + security tools
+
+## 🛠️ How to Add CRS/Custom Rules
+
+1. Download the [OWASP CRS](https://github.com/coreruleset/coreruleset) release and copy all `REQUEST-*.conf` and `RESPONSE-*.conf` files into `config/modsecurity/rules/`.
+2. Add your custom rules to `custom-rules.conf` in the same directory.
+3. The Helm chart will mount these into the container at `/etc/nginx/modsecurity/rules/`.
