@@ -1,0 +1,68 @@
+# WAF Configuration
+waf:
+  enabled: true
+  image:
+    repository: nginx/nginx-modsecurity
+    tag: 1.23.3
+    pullPolicy: IfNotPresent
+  modsecurity:
+    enabled: true
+    preset: "OWASP"  # Options: OWASP, Strict, Minimal
+    customRules: ""
+    secRuleEngine: "On"
+    auditLog: "/var/log/modsec_audit.log"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "2000m"
+      memory: "2048Mi"
+
+# Reverse Proxy Configuration
+proxy:
+  backendService: "http://app-service.default.svc.cluster.local:8080"
+  rateLimiting:
+    enabled: true
+    rate: "100r/s"
+    burst: 50
+    zoneSize: "10m"
+
+# TLS Configuration
+tls:
+  enabled: true
+  certManager:
+    enabled: true
+    issuer: "letsencrypt-prod"
+    secretName: "waf-tls-cert"
+  autoRedirect: true
+
+# CrowdSec Integration
+crowdsec:
+  enabled: true
+  apiKey: ""
+  bouncerImage:
+    repository: crowdsecurity/nginx-bouncer
+    tag: "latest"
+
+# Monitoring
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    port: 9113
+    path: "/metrics"
+  logging:
+    enabled: true
+    sidecar: true
+
+# Security Hardening
+security:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 2000
+  networkPolicy:
+    enabled: true
+    ingress:
+      allowedIPs: []

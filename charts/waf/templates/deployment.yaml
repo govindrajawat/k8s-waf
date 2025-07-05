@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "waf.fullname" . }}
+  labels:
+    {{- include "waf.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "waf.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "{{ .Values.monitoring.prometheus.enabled }}"
+        prometheus.io/port: "{{ .Values.monitoring.prometheus.port }}"
+        prometheus.io/path: "{{ .Values.monitoring.prometheus.path }}"
+      labels:
+        {{- include "waf.selectorLabels" . | nindent 8 }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.security.podSecurityContext | nindent 8 }}
+      containers:
+      - name: {{ .Chart.Name }}
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        image: "{{ .Values.waf.image.repository }}:{{ .Values.waf.image.tag }}"
+        imagePullPolicy: {{ .Values.waf.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 80
+        - name: https
+          containerPort: 443
+        - name: metrics
+          containerPort: {{ .Values.monitoring.prometheus.port }}
+        env:
+        - name: BACKEND_SERVICE
+          value: {{ .Values.proxy.backendService | quote }}
+        - name: MODSECURITY_ENABLED
+          value: {{ .Values.waf.modsecurity.enabled | quote }}
+        volumeMounts:
+        - name: modsecurity-config
+          mountPath: /etc/nginx/modsecurity.d
+        - name: modsecurity-rules
+          mountPath: /etc/nginx/owasp-modsecurity-crs
+        - name: modsecurity-data
+          mountPath: /var/log/modsecurity
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          {{- toYaml .Values.waf.resources | nindent 10 }}
+      {{- if .Values.crowdsec.enabled }}
+      - name: crowdsec-bouncer
+        image: "{{ .Values.crowdsec.bouncerImage.repository }}:{{ .Values.crowdsec.bouncerImage.tag }}"
+        env:
+        - name: CROWDSEC_AGENT_HOST
+          value: "crowdsec-service.default.svc.cluster.local"
+        - name: CROWDSEC_BOUNCER_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: crowdsec-secrets
+              key: apiKey
+      {{- end }}
+      volumes:
+      - name: modsecurity-config
+        configMap:
+          name: {{ include "waf.fullname" . }}-modsecurity-config
+      - name: modsecurity-rules
+        configMap:
+          name: {{ include "waf.fullname" . }}-modsecurity-rules
+      - name: modsecurity-data
+        emptyDir: {}
+      - name: nginx-config
+        configMap:
+          name: {{ include "waf.fullname" . }}-nginx-config
+          items:
+          - key: nginx.conf
+            path: nginx.conf
