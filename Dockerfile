@@ -86,6 +86,13 @@ RUN wget https://nginx.org/download/nginx-1.24.0.tar.gz && \
 # Runtime stage
 FROM ubuntu:22.04
 
+# Add metadata labels
+LABEL maintainer="Govind Singh Rajawat <govindrajawat260398@gmail.com>"
+LABEL description="Kubernetes WAF with NGINX and ModSecurity"
+LABEL vendor="Govind Singh Rajawat"
+LABEL version="1.0.0"
+LABEL org.opencontainers.image.source="https://github.com/govindrajawat/k8s-waf"
+
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     libpcre3 \

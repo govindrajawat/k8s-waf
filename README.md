@@ -2,6 +2,8 @@
 
 A production-grade, open-source Web Application Firewall for Kubernetes clusters with advanced security features, monitoring, and GitOps-ready deployment.
 
+**Built with ❤️ by [Govind Singh Rajawat](https://github.com/govindrajawat) - DevOps Engineer specializing in cloud infrastructure, CI/CD, and Kubernetes security.**
+
 ## 🛡️ Features
 
 ### Core Security
@@ -66,7 +68,7 @@ A production-grade, open-source Web Application Firewall for Kubernetes clusters
 
 ### 1. Add Helm Repository
 ```bash
-helm repo add k8s-waf https://your-github-username.github.io/k8s-waf
+helm repo add k8s-waf https://govindrajawat.github.io/k8s-waf
 helm repo update
 ```
 
@@ -327,11 +329,27 @@ make stress-test
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## 👨‍💻 About the Author
+
+**Govind Singh Rajawat** is a passionate DevOps Engineer with expertise in cloud infrastructure, CI/CD pipelines, and Kubernetes security. With a focus on automation and security-first approaches, Govind specializes in building scalable, secure, and reliable cloud-native solutions.
+
+### Connect with Govind:
+- 🌐 **GitHub**: [@govindrajawat](https://github.com/govindrajawat)
+- 💼 **LinkedIn**: [Govind Singh Rajawat](https://linkedin.com/in/govindrajawat)
+- 📧 **Email**: [govindrajawat260398@gmail.com](mailto:govindrajawat260398@gmail.com)
+
+### Areas of Expertise:
+- ☁️ **Multi-Cloud**: AWS, Azure, Kubernetes, Terraform
+- 🔧 **CI/CD**: Jenkins, GitHub Actions, Azure DevOps
+- 🔒 **Security**: VAPT, Security Hardening, Compliance
+- 📊 **Monitoring**: Prometheus, Grafana, Observability
+- 🚀 **Automation**: Infrastructure as Code, GitOps
+
 ## 🆘 Support
 
-- **Documentation**: [Wiki](https://github.com/your-username/k8s-waf/wiki)
-- **Issues**: [GitHub Issues](https://github.com/your-username/k8s-waf/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-username/k8s-waf/discussions)
+- **Documentation**: [Wiki](https://github.com/govindrajawat/k8s-waf/wiki)
+- **Issues**: [GitHub Issues](https://github.com/govindrajawat/k8s-waf/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/govindrajawat/k8s-waf/discussions)
 - **Security**: [Security Policy](SECURITY.md)
 
 ## 🙏 Acknowledgments
@@ -357,3 +375,31 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 1. Download the [OWASP CRS](https://github.com/coreruleset/coreruleset) release and copy all `REQUEST-*.conf` and `RESPONSE-*.conf` files into `config/modsecurity/rules/`.
 2. Add your custom rules to `custom-rules.conf` in the same directory.
 3. The Helm chart will mount these into the container at `/etc/nginx/modsecurity/rules/`.
+
+---
+
+## 🌟 GitHub Profile Showcase
+
+This project is part of [Govind Singh Rajawat's](https://github.com/govindrajawat) open-source portfolio. Check out other projects:
+
+### 🔥 Featured Projects
+- **[Terraform Azure Modules](https://github.com/govindrajawat/terraform-azure-modules)** - Modular Infrastructure-as-Code for Azure
+- **[CI/CD Templates](https://github.com/govindrajawat/awesome-ci-cd-templates)** - Reusable GitHub Actions workflows
+- **[K8s Monitoring Stack](https://github.com/govindrajawat/k8s-monitoring)** - Prometheus and Grafana for Kubernetes
+- **[Security Hardening](https://github.com/govindrajawat/security-hardening)** - VAPT-based security scripts
+
+### 🛡️ This WAF Project
+This Kubernetes WAF represents a comprehensive security solution that demonstrates:
+- **Production-Grade Security** - Enterprise-level WAF protection
+- **Cloud-Native Architecture** - Designed specifically for Kubernetes
+- **DevOps Best Practices** - CI/CD, monitoring, and automation
+- **Security Compliance** - PCI DSS, SOC 2, ISO 27001, GDPR ready
+- **Open Source Excellence** - Community-driven development
+
+**Star this repository if you find it helpful! ⭐**
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
