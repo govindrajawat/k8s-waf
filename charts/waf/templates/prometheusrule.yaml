@@ -1,0 +1,165 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "waf.fullname" . }}-rules
+  labels:
+    {{- include "waf.labels" . | nindent 4 }}
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    {{- with .Values.monitoring.prometheusRule.groups }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    
+    # Additional WAF-specific alerting rules
+    - name: waf.security.rules
+      rules:
+        # High block rate alert
+        - alert: WAFHighBlockRate
+          expr: rate(waf_requests_blocked[5m]) > 0.1
+          for: 2m
+          labels:
+            severity: warning
+            category: security
+          annotations:
+            summary: "High WAF block rate detected"
+            description: "WAF is blocking {{ $value }} requests per second"
+            
+        # High request volume alert
+        - alert: WAFHighRequestVolume
+          expr: rate(waf_requests_total[5m]) > 1000
+          for: 2m
+          labels:
+            severity: warning
+            category: performance
+          annotations:
+            summary: "High request volume detected"
+            description: "WAF is processing {{ $value }} requests per second"
+            
+        # Certificate expiration alert
+        - alert: WAFCertificateExpiring
+          expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 30
+          for: 1m
+          labels:
+            severity: warning
+            category: security
+          annotations:
+            summary: "WAF certificate expiring soon"
+            description: "Certificate will expire in {{ $value }} seconds"
+            
+        # ModSecurity rule triggers
+        - alert: WAFModSecurityRuleTriggered
+          expr: rate(modsecurity_rules_triggered_total[5m]) > 0.05
+          for: 1m
+          labels:
+            severity: info
+            category: security
+          annotations:
+            summary: "ModSecurity rules triggered"
+            description: "{{ $value }} ModSecurity rules triggered per second"
+            
+        # Rate limit violations
+        - alert: WAFRateLimitExceeded
+          expr: rate(waf_rate_limit_exceeded_total[5m]) > 0.1
+          for: 1m
+          labels:
+            severity: warning
+            category: security
+          annotations:
+            summary: "Rate limit exceeded"
+            description: "{{ $value }} rate limit violations per second"
+            
+        # DDoS attack detection
+        - alert: WAFDDoSAttackDetected
+          expr: rate(waf_requests_total[1m]) > 5000
+          for: 30s
+          labels:
+            severity: critical
+            category: security
+          annotations:
+            summary: "Potential DDoS attack detected"
+            description: "{{ $value }} requests per second - possible DDoS attack"
+            
+        # WAF service down
+        - alert: WAFServiceDown
+          expr: up{job="{{ include "waf.fullname" . }}"}) == 0
+          for: 1m
+          labels:
+            severity: critical
+            category: availability
+          annotations:
+            summary: "WAF service is down"
+            description: "WAF service has been down for more than 1 minute"
+            
+        # High error rate
+        - alert: WAFHighErrorRate
+          expr: rate(waf_requests_total{status=~"5.."}[5m]) / rate(waf_requests_total[5m]) > 0.1
+          for: 2m
+          labels:
+            severity: warning
+            category: availability
+          annotations:
+            summary: "High error rate detected"
+            description: "{{ $value | humanizePercentage }} of requests are returning 5xx errors"
+            
+        # High response time
+        - alert: WAFHighResponseTime
+          expr: histogram_quantile(0.95, rate(waf_response_time_seconds_bucket[5m])) > 2
+          for: 2m
+          labels:
+            severity: warning
+            category: performance
+          annotations:
+            summary: "High response time detected"
+            description: "95th percentile response time is {{ $value }} seconds"
+            
+        # Memory usage high
+        - alert: WAFHighMemoryUsage
+          expr: (container_memory_usage_bytes{container="{{ include "waf.fullname" . }}"}) / (container_spec_memory_limit_bytes{container="{{ include "waf.fullname" . }}"}) > 0.8
+          for: 5m
+          labels:
+            severity: warning
+            category: performance
+          annotations:
+            summary: "High memory usage"
+            description: "WAF is using {{ $value | humanizePercentage }} of memory limit"
+            
+        # CPU usage high
+        - alert: WAFHighCPUUsage
+          expr: rate(container_cpu_usage_seconds_total{container="{{ include "waf.fullname" . }}"}[5m]) > 0.8
+          for: 5m
+          labels:
+            severity: warning
+            category: performance
+          annotations:
+            summary: "High CPU usage"
+            description: "WAF CPU usage is {{ $value | humanizePercentage }}"
+            
+        # Fail2Ban alerts (if enabled)
+        {{- if .Values.waf.security.fail2ban.enabled }}
+        - alert: WAFFail2BanIPBlocked
+          expr: increase(fail2ban_banned_total[5m]) > 0
+          for: 1m
+          labels:
+            severity: info
+            category: security
+          annotations:
+            summary: "IP address blocked by Fail2Ban"
+            description: "{{ $value }} IP addresses blocked in the last 5 minutes"
+        {{- end }}
+        
+        # Wazuh alerts (if enabled)
+        {{- if .Values.waf.security.wazuh.enabled }}
+        - alert: WAFWazuhAlert
+          expr: increase(wazuh_alerts_total[5m]) > 0
+          for: 1m
+          labels:
+            severity: warning
+            category: security
+          annotations:
+            summary: "Wazuh security alert"
+            description: "{{ $value }} Wazuh alerts in the last 5 minutes"
+        {{- end }}
+{{- end }} 

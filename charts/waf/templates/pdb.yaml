@@ -1,0 +1,18 @@
+{{- if .Values.waf.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "waf.fullname" . }}-pdb
+  labels:
+    {{- include "waf.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "waf.selectorLabels" . | nindent 6 }}
+  {{- if .Values.waf.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.waf.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.waf.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.waf.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+{{- end }}

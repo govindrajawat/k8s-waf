@@ -1,0 +1,76 @@
+{{- if .Values.waf.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "waf.fullname" . }}
+  labels:
+    {{- include "waf.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "waf.fullname" . }}
+  minReplicas: {{ .Values.waf.hpa.minReplicas }}
+  maxReplicas: {{ .Values.waf.hpa.maxReplicas }}
+  metrics:
+    {{- if .Values.waf.hpa.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.waf.hpa.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.waf.hpa.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.waf.hpa.targetMemoryUtilizationPercentage }}
+    {{- end }}
+    # Custom metrics for WAF-specific scaling
+    - type: Object
+      object:
+        metric:
+          name: requests-per-second
+        describedObject:
+          apiVersion: v1
+          kind: Service
+          name: {{ include "waf.fullname" . }}
+        target:
+          type: AverageValue
+          averageValue: 1000
+    - type: Object
+      object:
+        metric:
+          name: blocked-requests-per-second
+        describedObject:
+          apiVersion: v1
+          kind: Service
+          name: {{ include "waf.fullname" . }}
+        target:
+          type: AverageValue
+          averageValue: 100
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 2
+        periodSeconds: 15
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      selectPolicy: Min
+{{- end }}

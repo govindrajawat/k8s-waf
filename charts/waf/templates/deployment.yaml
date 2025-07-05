@@ -4,38 +4,41 @@ metadata:
   name: {{ include "waf.fullname" . }}
   labels:
     {{- include "waf.labels" . | nindent 4 }}
+  {{- with .Values.waf.podAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  {{- if not .Values.waf.autoscaling.enabled }}
+  replicas: {{ .Values.waf.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "waf.selectorLabels" . | nindent 6 }}
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 1
-      maxSurge: 1
   template:
     metadata:
-      annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "{{ .Values.monitoring.prometheus.port }}"
-        prometheus.io/path: "{{ .Values.monitoring.prometheus.path }}"
       labels:
         {{- include "waf.selectorLabels" . | nindent 8 }}
+      {{- with .Values.waf.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
-      {{- with .Values.imagePullSecrets }}
+      {{- with .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      serviceAccountName: {{ include "waf.serviceAccountName" . }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml .Values.waf.podSecurityContext | nindent 8 }}
+      {{- if .Values.waf.initContainers }}
+      initContainers:
+        {{- toYaml .Values.waf.initContainers | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
-          securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: "{{ .Values.global.imageRegistry | default .Values.waf.image.repository }}{{ .Values.waf.image.repository | default .Values.waf.image.repository }}:{{ .Values.waf.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.waf.image.pullPolicy }}
           ports:
             - name: http
               containerPort: 80
@@ -44,79 +47,282 @@ spec:
               containerPort: 443
               protocol: TCP
             - name: metrics
-              containerPort: {{ .Values.monitoring.prometheus.port }}
+              containerPort: 9113
               protocol: TCP
+          {{- if .Values.waf.livenessProbe.enabled }}
           livenessProbe:
             httpGet:
               path: /healthz
               port: http
-              scheme: HTTP
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
+            initialDelaySeconds: {{ .Values.waf.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.waf.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.waf.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.waf.livenessProbe.failureThreshold }}
+            successThreshold: {{ .Values.waf.livenessProbe.successThreshold }}
+          {{- end }}
+          {{- if .Values.waf.readinessProbe.enabled }}
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /readyz
               port: http
-              scheme: HTTP
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
+            initialDelaySeconds: {{ .Values.waf.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.waf.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.waf.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.waf.readinessProbe.failureThreshold }}
+            successThreshold: {{ .Values.waf.readinessProbe.successThreshold }}
+          {{- end }}
+          {{- if .Values.waf.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /startupz
+              port: http
+            initialDelaySeconds: {{ .Values.waf.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.waf.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.waf.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.waf.startupProbe.failureThreshold }}
+            successThreshold: {{ .Values.waf.startupProbe.successThreshold }}
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.waf.securityContext | nindent 12 }}
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- toYaml .Values.waf.resources | nindent 12 }}
+          env:
+            - name: WAF_MODE
+              value: {{ .Values.waf.mode | quote }}
+            - name: NGINX_WORKER_PROCESSES
+              value: {{ .Values.waf.nginx.workerProcesses | quote }}
+            - name: NGINX_WORKER_CONNECTIONS
+              value: {{ .Values.waf.nginx.workerConnections | quote }}
+            - name: MODSECURITY_ENGINE
+              value: {{ .Values.waf.modsecurity.engine | quote }}
+            - name: RATE_LIMIT_REQUESTS
+              value: {{ .Values.waf.rateLimit.requests | quote }}
+            - name: RATE_LIMIT_BURST
+              value: {{ .Values.waf.rateLimit.burst | quote }}
+            - name: RATE_LIMIT_WINDOW
+              value: {{ .Values.waf.rateLimit.window | quote }}
+            {{- with .Values.waf.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           volumeMounts:
-            - name: config
+            - name: nginx-config
               mountPath: /etc/nginx/nginx.conf
               subPath: nginx.conf
-            - name: config
-              mountPath: /etc/nginx/modsecurity.d
-              subPath: modsecurity
+            - name: nginx-sites
+              mountPath: /etc/nginx/conf.d
+            - name: modsecurity-config
+              mountPath: /etc/nginx/modsecurity
+            - name: modsecurity-rules
+              mountPath: /etc/nginx/modsecurity/rules
             - name: modsecurity-audit
-              mountPath: /var/log/modsecurity/audit
-            - name: modsecurity-data
-              mountPath: /var/log/modsecurity/data
-            - name: tls
+              mountPath: /var/log/modsecurity
+            - name: nginx-logs
+              mountPath: /var/log/nginx
+            {{- if .Values.waf.tls.enabled }}
+            - name: tls-certs
               mountPath: /etc/nginx/ssl
               readOnly: true
+            {{- end }}
+            {{- with .Values.waf.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.waf.lifecycle }}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+        # ModSecurity sidecar container
+        - name: modsecurity
+          image: "{{ .Values.global.imageRegistry | default .Values.waf.modsecurity.image.repository }}{{ .Values.waf.modsecurity.image.repository | default .Values.waf.modsecurity.image.repository }}:{{ .Values.waf.modsecurity.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.waf.modsecurity.image.pullPolicy }}
+          ports:
+            - name: modsec
+              containerPort: 8080
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 101
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
           env:
-            - name: NGINX_WORKER_PROCESSES
-              value: {{ .Values.nginx.config.workerProcesses | quote }}
-            - name: NGINX_WORKER_CONNECTIONS
-              value: {{ .Values.nginx.config.workerConnections | quote }}
-      {{- if .Values.logging.enabled }}
-      {{- if .Values.logging.sidecar.enabled }}
-        - name: logging-sidecar
-          image: {{ .Values.logging.sidecar.image }}:{{ .Values.logging.sidecar.tag }}
-          imagePullPolicy: IfNotPresent
+            - name: MODSECURITY_ENGINE
+              value: {{ .Values.waf.modsecurity.engine | quote }}
+            - name: MODSECURITY_AUDIT_LOG
+              value: "/var/log/modsecurity/audit.log"
+            - name: MODSECURITY_DEBUG_LOG
+              value: "/var/log/modsecurity/debug.log"
           volumeMounts:
+            - name: modsecurity-config
+              mountPath: /etc/modsecurity
+            - name: modsecurity-rules
+              mountPath: /etc/modsecurity/rules
             - name: modsecurity-audit
-              mountPath: /var/log/modsecurity/audit
-            - name: modsecurity-data
-              mountPath: /var/log/modsecurity/data
-      {{- end }}
-      {{- end }}
+              mountPath: /var/log/modsecurity
+
+        # Fail2Ban sidecar (if enabled)
+        {{- if .Values.waf.security.fail2ban.enabled }}
+        - name: fail2ban
+          image: "{{ .Values.global.imageRegistry | default }}fail2ban/fail2ban:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: fail2ban
+              containerPort: 8080
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "25m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+          env:
+            - name: FAIL2BAN_MAX_RETRY
+              value: {{ .Values.waf.security.fail2ban.maxRetry | quote }}
+            - name: FAIL2BAN_BANTIME
+              value: {{ .Values.waf.security.fail2ban.bantime | quote }}
+            - name: FAIL2BAN_FINDTIME
+              value: {{ .Values.waf.security.fail2ban.findtime | quote }}
+          volumeMounts:
+            - name: nginx-logs
+              mountPath: /var/log/nginx
+            - name: fail2ban-config
+              mountPath: /etc/fail2ban
+            - name: fail2ban-data
+              mountPath: /var/lib/fail2ban
+        {{- end }}
+
+        # Wazuh agent sidecar (if enabled)
+        {{- if .Values.waf.security.wazuh.enabled }}
+        - name: wazuh-agent
+          image: "{{ .Values.global.imageRegistry | default }}wazuh/wazuh-agent:4.7.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          env:
+            - name: WAZUH_MANAGER
+              value: {{ .Values.waf.security.wazuh.endpoint | quote }}
+            - name: WAZUH_PROTOCOL
+              value: {{ .Values.waf.security.wazuh.protocol | quote }}
+          volumeMounts:
+            - name: nginx-logs
+              mountPath: /var/log/nginx
+            - name: wazuh-config
+              mountPath: /var/ossec/etc
+            - name: wazuh-data
+              mountPath: /var/ossec/var
+        {{- end }}
+
+        # Prometheus exporter sidecar
+        {{- if .Values.monitoring.enabled }}
+        - name: nginx-exporter
+          image: "{{ .Values.global.imageRegistry | default }}nginx/nginx-prometheus-exporter:0.11.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9113
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "64Mi"
+              cpu: "50m"
+          args:
+            - -nginx.scrape-uri=http://localhost/nginx_status
+        {{- end }}
+
+        {{- with .Values.waf.sidecars }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
       volumes:
-        - name: config
+        - name: nginx-config
           configMap:
-            name: {{ include "waf.fullname" . }}-config
+            name: {{ include "waf.fullname" . }}-nginx-config
+        - name: nginx-sites
+          configMap:
+            name: {{ include "waf.fullname" . }}-nginx-sites
+        - name: modsecurity-config
+          configMap:
+            name: {{ include "waf.fullname" . }}-modsecurity-config
+        - name: modsecurity-rules
+          configMap:
+            name: {{ include "waf.fullname" . }}-modsecurity-rules
         - name: modsecurity-audit
           emptyDir: {}
-        - name: modsecurity-data
+        - name: nginx-logs
           emptyDir: {}
-        - name: tls
+        {{- if .Values.waf.tls.enabled }}
+        - name: tls-certs
           secret:
-            secretName: {{ include "waf.fullname" . }}-tls
-      {{- with .Values.nodeSelector }}
+            secretName: {{ .Values.waf.tls.certificate.secretName }}
+        {{- end }}
+        {{- if .Values.waf.security.fail2ban.enabled }}
+        - name: fail2ban-config
+          configMap:
+            name: {{ include "waf.fullname" . }}-fail2ban-config
+        - name: fail2ban-data
+          emptyDir: {}
+        {{- end }}
+        {{- if .Values.waf.security.wazuh.enabled }}
+        - name: wazuh-config
+          configMap:
+            name: {{ include "waf.fullname" . }}-wazuh-config
+        - name: wazuh-data
+          emptyDir: {}
+        {{- end }}
+        {{- with .Values.waf.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.waf.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
+      {{- with .Values.waf.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.tolerations }}
+      {{- with .Values.waf.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}

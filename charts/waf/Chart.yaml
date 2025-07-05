@@ -1,22 +1,36 @@
 apiVersion: v2
 name: waf
-description: A production-grade Web Application Firewall for Kubernetes
+description: A production-grade Web Application Firewall for Kubernetes with NGINX + ModSecurity
+type: application
 version: 1.0.0
 appVersion: "1.0.0"
-dependencies:
-  - name: cert-manager
-    version: v1.13.0
-    repository: https://charts.jetstack.io
-    condition: cert-manager.enabled
 keywords:
   - waf
   - security
   - nginx
   - modsecurity
   - kubernetes
-home: https://github.com/yourusername/kubernetes-waf
+  - firewall
+home: https://github.com/your-username/k8s-waf
 sources:
-  - https://github.com/yourusername/kubernetes-waf
+  - https://github.com/your-username/k8s-waf
 maintainers:
   - name: Your Name
     email: your.email@example.com
+    url: https://github.com/your-username
+icon: https://raw.githubusercontent.com/your-username/k8s-waf/main/docs/icon.png
+annotations:
+  category: Security
+  licenses: MIT
+  vendor: Your Organization
+  support: https://github.com/your-username/k8s-waf/issues
+kubeVersion: ">=1.24.0-0"
+dependencies:
+  - name: prometheus-operator
+    version: "^9.0.0"
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: monitoring.enabled
+  - name: grafana
+    version: "^6.0.0"
+    repository: https://grafana.github.io/helm-charts
+    condition: monitoring.enabled

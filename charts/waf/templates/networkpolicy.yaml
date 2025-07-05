@@ -1,0 +1,132 @@
+{{- if .Values.waf.networkPolicy.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "waf.fullname" . }}-network-policy
+  labels:
+    {{- include "waf.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "waf.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  # Ingress rules
+  ingress:
+    # Allow HTTP traffic
+    - ports:
+        - protocol: TCP
+          port: 80
+      from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+    
+    # Allow HTTPS traffic
+    - ports:
+        - protocol: TCP
+          port: 443
+      from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+    
+    # Allow metrics scraping
+    {{- if .Values.monitoring.enabled }}
+    - ports:
+        - protocol: TCP
+          port: 9113
+      from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: grafana
+    {{- end }}
+    
+    # Allow health checks
+    - ports:
+        - protocol: TCP
+          port: 80
+      from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kubelet
+    
+    # Custom ingress rules
+    {{- with .Values.waf.networkPolicy.ingressRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  
+  # Egress rules
+  egress:
+    # Allow DNS resolution
+    - ports:
+        - protocol: UDP
+          port: 53
+      to:
+        - namespaceSelector: {}
+    
+    # Allow HTTP/HTTPS to backend services
+    - ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+      to:
+        - namespaceSelector: {}
+    
+    # Allow communication with Kubernetes API
+    - ports:
+        - protocol: TCP
+          port: 443
+      to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+        - podSelector:
+            matchLabels:
+              k8s-app: kube-apiserver
+    
+    # Allow communication with monitoring services
+    {{- if .Values.monitoring.enabled }}
+    - ports:
+        - protocol: TCP
+          port: 9090
+      to:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+    {{- end }}
+    
+    # Allow communication with Wazuh manager
+    {{- if .Values.waf.security.wazuh.enabled }}
+    - ports:
+        - protocol: UDP
+          port: 1514
+      to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: wazuh-manager
+    {{- end }}
+    
+    # Custom egress rules
+    {{- with .Values.waf.networkPolicy.egressRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }} 

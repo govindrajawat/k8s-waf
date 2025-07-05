@@ -1,121 +1,478 @@
-# Default values for waf
-replicaCount: 2
+# Default values for WAF Helm Chart
+# This is a YAML-formatted file.
 
-image:
-  repository: nginx/nginx-modsecurity
-  tag: 1.25.3
-  pullPolicy: IfNotPresent
+# Global configuration
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+  nameOverride: ""
+  fullnameOverride: ""
 
-modsecurity:
+# WAF Configuration
+waf:
   enabled: true
-  preset: "owasp" # owasp or basic
-  rules:
-    denyStatus: 403
-    auditLog: true
-    auditLogParts: "ABIJDEFHZ"
-    auditLogRelevantStatus: "^(?:5|4(?!04))"
-    auditLogStorageDir: "/var/log/modsecurity/audit"
-    secRuleEngine: "On"
-    secRequestBodyLimit: 13107200
-    secRequestBodyNoFilesLimit: 131072
-    secRequestBodyInMemoryLimit: 131072
-    secResponseBodyLimit: 524288
-    secPcreMatchLimit: 1000
-    secPcreMatchLimitRecursion: 1000
+  
+  # Image configuration
+  image:
+    repository: owasp/modsecurity-crs
+    tag: "v4.0.0-nginx"
+    pullPolicy: IfNotPresent
+    
+  # NGINX image
+  nginx:
+    image:
+      repository: nginx
+      tag: "1.25-alpine"
+      pullPolicy: IfNotPresent
+      
+  # ModSecurity image
+  modsecurity:
+    image:
+      repository: owasp/modsecurity
+      tag: "v3.0.8-nginx"
+      pullPolicy: IfNotPresent
 
-nginx:
-  config:
-    workerProcesses: "auto"
-    workerConnections: "1024"
-    keepaliveTimeout: "65"
-    clientMaxBodySize: "10m"
-    serverNamesHashBucketSize: "128"
-    rateLimit:
+  # Deployment configuration
+  replicaCount: 2
+  
+  # Pod configuration
+  podAnnotations: {}
+  podSecurityContext:
+    fsGroup: 101
+    runAsNonRoot: true
+    runAsUser: 101
+    
+  # Container security context
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 101
+    
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 80
+    annotations: {}
+    
+  # Service for HTTPS
+  serviceHttps:
+    type: ClusterIP
+    port: 443
+    targetPort: 443
+    annotations: {}
+    
+  # Ingress configuration
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+      nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+      nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+      nginx.ingress.kubernetes.io/proxy-buffer-size: "4k"
+      nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: waf.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: waf-tls
+        hosts:
+          - waf.example.com
+          
+  # WAF Mode: block, detect, off
+  mode: "block"
+  
+  # Rate limiting configuration
+  rateLimit:
+    enabled: true
+    requests: 100
+    burst: 200
+    window: "1m"
+    zone: "waf_zone"
+    
+  # Security configuration
+  security:
+    # OWASP CRS rules
+    owaspRules: true
+    crsVersion: "3.3.4"
+    
+    # Custom rules
+    customRules: []
+    
+    # IP whitelist/blacklist
+    whitelistIps: []
+    blacklistIps: []
+    
+    # Security headers
+    securityHeaders:
       enabled: true
-      zoneSize: "10m"
-      rate: "10r/s"
-      burst: 20
-      delay: 8
-
-ingress:
-  enabled: true
-  className: "nginx"
-  annotations:
-    nginx.ingress.kubernetes.io/enable-modsecurity: "true"
-    nginx.ingress.kubernetes.io/modsecurity-snippet: |
-      SecRuleEngine On
-      SecAuditEngine RelevantOnly
-      SecAuditLogParts ABIJDEFHZ
-      SecAuditLogType Serial
-      SecAuditLog /var/log/modsecurity/audit.log
-      SecAuditLogStorageDir /var/log/modsecurity/audit/
-      SecDebugLog /var/log/modsecurity/debug.log
-      SecDebugLogLevel 0
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      modsecurity_rules_file /etc/nginx/modsecurity/main.conf;
-  hosts:
-    - host: waf.example.com
-      paths:
-        - path: /
-          pathType: Prefix
+      xFrameOptions: "SAMEORIGIN"
+      xContentTypeOptions: "nosniff"
+      xXSSProtection: "1; mode=block"
+      strictTransportSecurity: "max-age=31536000; includeSubDomains"
+      contentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+      referrerPolicy: "strict-origin-when-cross-origin"
+      permissionsPolicy: "geolocation=(), microphone=(), camera=()"
+      
+    # Fail2Ban integration
+    fail2ban:
+      enabled: false
+      maxRetry: 5
+      bantime: 3600
+      findtime: 600
+      logPath: "/var/log/nginx/access.log"
+      
+    # Wazuh integration
+    wazuh:
+      enabled: false
+      endpoint: "wazuh-manager:1514"
+      protocol: "udp"
+      
+    # Bot protection
+    botProtection:
+      enabled: true
+      userAgents:
+        - "bot"
+        - "crawler"
+        - "spider"
+        - "scraper"
+        
+    # DDoS protection
+    ddosProtection:
+      enabled: true
+      maxConnections: 1000
+      maxRequestsPerSecond: 100
+      
+  # TLS/SSL configuration
   tls:
-    - secretName: waf-tls
+    enabled: true
+    certManager:
+      enabled: true
+      clusterIssuer: letsencrypt-prod
+    minTlsVersion: "1.2"
+    cipherSuites:
+      - "ECDHE-ECDSA-AES128-GCM-SHA256"
+      - "ECDHE-RSA-AES128-GCM-SHA256"
+      - "ECDHE-ECDSA-AES256-GCM-SHA384"
+      - "ECDHE-RSA-AES256-GCM-SHA384"
+    certificate:
+      secretName: waf-tls
       hosts:
         - waf.example.com
+        
+  # NGINX configuration
+  nginx:
+    # Worker configuration
+    workerProcesses: auto
+    workerConnections: 1024
+    workerRlimitNofile: 65536
+    
+    # Timeouts
+    keepaliveTimeout: 65
+    clientHeaderTimeout: 60
+    clientBodyTimeout: 60
+    sendTimeout: 60
+    
+    # Buffer sizes
+    clientMaxBodySize: "10m"
+    clientBodyBufferSize: "128k"
+    clientHeaderBufferSize: "1k"
+    largeClientHeaderBuffers: "4 8k"
+    
+    # Gzip compression
+    gzip:
+      enabled: true
+      level: 6
+      types:
+        - text/plain
+        - text/css
+        - text/xml
+        - text/javascript
+        - application/javascript
+        - application/xml+rss
+        - application/json
+        
+    # Custom configuration
+    customConfig: ""
+    
+  # ModSecurity configuration
+  modsecurity:
+    # Engine configuration
+    engine: "On"
+    requestBodyLimit: "13107200"
+    requestBodyNoFilesLimit: "131072"
+    requestBodyInMemoryLimit: "131072"
+    requestBodyAccess: "On"
+    responseBodyAccess: "On"
+    responseBodyLimit: "524288"
+    
+    # Audit logging
+    auditLog:
+      enabled: true
+      format: "JSON"
+      parts: "ABIJDEFHZ"
+      
+    # Debug logging
+    debugLog:
+      enabled: false
+      level: 0
+      
+    # Custom rules
+    customRules: ""
+    
+  # Resources configuration
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+      
+  # Node selector
+  nodeSelector: {}
+  
+  # Tolerations
+  tolerations: []
+  
+  # Affinity
+  affinity: {}
+  
+  # Pod disruption budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+    maxUnavailable: 1
+    
+  # Horizontal Pod Autoscaler
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+    
+  # Service account
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+    
+  # RBAC
+  rbac:
+    create: true
+    
+  # Network policies
+  networkPolicy:
+    enabled: true
+    ingressRules: []
+    egressRules: []
+    
+  # ConfigMaps and Secrets
+  configMaps: {}
+  secrets: {}
+  
+  # Volume mounts
+  volumeMounts: []
+  volumes: []
+  
+  # Environment variables
+  env: []
+  
+  # Init containers
+  initContainers: []
+  
+  # Sidecar containers
+  sidecars: []
+  
+  # Lifecycle hooks
+  lifecycle: {}
+  
+  # Liveness probe
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+    successThreshold: 1
+    
+  # Readiness probe
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+    successThreshold: 1
+    
+  # Startup probe
+  startupProbe:
+    enabled: false
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+    successThreshold: 1
 
-resources:
-  limits:
-    cpu: 1000m
-    memory: 512Mi
-  requests:
-    cpu: 500m
-    memory: 256Mi
-
-autoscaling:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 80
-  targetMemoryUtilizationPercentage: 80
-
-nodeSelector: {}
-tolerations: []
-affinity: {}
-
-certManager:
-  enabled: true
-  issuer:
-    name: "letsencrypt-prod"
-    kind: "ClusterIssuer"
-    server: "https://acme-v02.api.letsencrypt.org/directory"
-
+# Monitoring configuration
 monitoring:
   enabled: true
-  prometheus:
+  
+  # ServiceMonitor for Prometheus
+  serviceMonitor:
     enabled: true
-    port: 9113
+    interval: "30s"
+    scrapeTimeout: "10s"
     path: "/metrics"
+    port: "metrics"
+    
+  # PrometheusRule for alerting
+  prometheusRule:
+    enabled: true
+    groups:
+      - name: waf.rules
+        rules:
+          - alert: WAFHighBlockRate
+            expr: rate(waf_requests_blocked[5m]) > 0.1
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High WAF block rate detected"
+              description: "WAF is blocking {{ $value }} requests per second"
+              
+          - alert: WAFHighRequestVolume
+            expr: rate(waf_requests_total[5m]) > 1000
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High request volume detected"
+              description: "WAF is processing {{ $value }} requests per second"
+              
+          - alert: WAFCertificateExpiring
+            expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 30
+            for: 1m
+            labels:
+              severity: warning
+            annotations:
+              summary: "WAF certificate expiring soon"
+              description: "Certificate will expire in {{ $value }} seconds"
+              
+  # Grafana dashboard
   grafana:
     enabled: true
     dashboard:
       enabled: true
-
+      name: "WAF Dashboard"
+      namespace: "monitoring"
+      
+# Backup configuration
+backup:
+  enabled: false
+  schedule: "0 2 * * *"
+  retention: "30d"
+  storage:
+    type: "s3"
+    bucket: "waf-backups"
+    region: "us-west-2"
+    
+# Logging configuration
 logging:
   enabled: true
-  sidecar:
+  level: "info"
+  format: "json"
+  
+  # Fluentd configuration
+  fluentd:
+    enabled: false
+    image:
+      repository: fluent/fluentd-kubernetes-daemonset
+      tag: "v1.14-debian-elasticsearch7-1"
+    config: {}
+    
+  # Elasticsearch configuration
+  elasticsearch:
+    enabled: false
+    host: "elasticsearch-master"
+    port: 9200
+    index: "waf-logs"
+    
+# Testing configuration
+testing:
+  enabled: false
+  
+  # Security tests
+  security:
     enabled: true
-    image: "fluent/fluent-bit"
-    tag: "2.1.0"
-
-securityContext:
+    tools:
+      - "zap"
+      - "nikto"
+      - "nuclei"
+      
+  # Load tests
+  load:
+    enabled: true
+    tool: "k6"
+    scenarios:
+      - name: "normal-load"
+        duration: "5m"
+        vus: 10
+      - name: "stress-test"
+        duration: "10m"
+        vus: 50
+        
+  # Compliance tests
+  compliance:
+    enabled: true
+    standards:
+      - "OWASP"
+      - "PCI-DSS"
+      - "SOC2"
+      
+# CI/CD configuration
+cicd:
   enabled: true
-  runAsUser: 101
-  runAsGroup: 101
-  fsGroup: 101
-  readOnlyRootFilesystem: true
-  allowPrivilegeEscalation: false
-  capabilities:
-    drop:
-      - ALL
-    add:
-      - NET_BIND_SERVICE
+  
+  # GitHub Actions
+  githubActions:
+    enabled: true
+    workflows:
+      - "ci.yml"
+      - "cd.yml"
+      - "security.yml"
+      
+  # ArgoCD
+  argocd:
+    enabled: false
+    application:
+      name: "waf"
+      namespace: "argocd"
+      project: "default"
+      repoURL: "https://github.com/your-username/k8s-waf"
+      targetRevision: "main"
+      path: "charts/waf"
+      
+# Documentation
+documentation:
+  enabled: true
+  format: "markdown"
+  include:
+    - "README.md"
+    - "SECURITY.md"
+    - "CONTRIBUTING.md"
+    - "CHANGELOG.md"
